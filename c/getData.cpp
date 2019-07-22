@@ -1,4 +1,5 @@
-// g++ -g getData.cpp -fpermissive -lodbc -o getData  && ./getData
+// g++ -O3 -Wall -shared -std=c++11 -fPIC `python3 -m pybind11 --includes` c/pyGetData.cpp -lodbc -fpermissive -o /home/bwp/miniconda3/lib/python3.7/site-packages/quantitate`python3-config --extension-suffix`
+
 #include <iostream>
 #include <string>
 #include <sqlext.h>
@@ -9,11 +10,17 @@
 #include <map>
 #include <bits/stdc++.h>
 #include <iterator> 
+#include <new>
+#include <vector>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
+namespace py = pybind11;
 using namespace std;
 
 class getData {
     public:
+    
         #define dataLen 20
 
         SQLHENV henv;  
@@ -27,7 +34,9 @@ class getData {
     	map<string, SQLCHAR[dataLen]> dataMap;
         map<string, SQLLEN> ptrMap;
 
-    getData(SQLCHAR* query, string columns[], int columnsLen){
+    getData(string sQuery, vector<string> columns){
+
+        char* query = sQuery.c_str();
 
         retcode = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &henv);  
   
@@ -52,15 +61,14 @@ class getData {
                         cout << "Success!" << endl;
 
                         retcode = SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt);
-
                         // Process data  
                         if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {  
 
                             if (SQL_SUCCESS != SQLExecDirect(hstmt, query, SQL_NTS)) {
-                                cout << "Error querying SQL Server";
+                                cout << "Error querying SQL Server" << endl;
                                 completed();
                             } else {
-                                bindColumns(columns, columnsLen);
+                                bindColumns(columns);
                             }
                         }
                     }
@@ -69,22 +77,21 @@ class getData {
         }
     }
 
-    void bindColumns(string columns[], int columnsLen){
+    void bindColumns(vector<string> columns){
 
-        for(int i = 0; i < columnsLen; i++){
-            SQLBindCol(hstmt, i+1, SQL_C_CHAR, dataMap[columns[i]], dataLen, ptrMap[columns[i]]);
+        for(int i = 0; i < columns.size(); i++){
+            SQLBindCol(hstmt, i+1, SQL_C_CHAR, dataMap[columns.at(i)], dataLen, ptrMap[columns.at(i)]);
         }
     }
 
     bool next(){
 
         retcode = SQLFetch(hstmt);
-
         return (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) ? true : false;
     }
 
-    SQLCHAR* data(string item){
-	    return dataMap[item];
+    double data(string item){
+	    return atof(dataMap[item]);
     }
 
     void completed(){
@@ -94,23 +101,11 @@ class getData {
         SQLFreeHandle(SQL_HANDLE_DBC, hdbc);  
         cout << "done" << endl;
     }
-
-
-
 };
 
-int main(){
-
-    SQLCHAR* query = "SELECT [AAPL].timestamp, [AAPL].[open], [AAPL].[high], [AAPL].[close], [AAPL].[low], [AAPL].[volume], [AMZN].[open], [AMZN].[high], [AMZN].[close], [AMZN].[low], [AMZN].[volume] FROM AAPLdaily AS [AAPL], AMZNdaily AS [AMZN] WHERE [AMZN].timestamp = [AAPL].timestamp;";
-    string columns[] = {"AAPL.timestamp", "AAPL.open", "AAPL.high", "AAPL.close", "AAPL.low", "AAPL.volume", "AMZN.open", "AMZN.high", "AMZN.close", "AMZN.low", "AMZN.volume"};
-    int columnsLen = 11;
-
-    getData test(query, columns, 11);
-
-    while(test.next()){
-        cout << test.data("AMZN.high") << endl;
-    }
-
-    test.completed();
-
+PYBIND11_MODULE(quantitate, m){
+    py::class_<getData>(m, "getData")
+        .def(py::init<string &, vector<string>>())
+        .def("next", &getData::next)
+        .def("data", &getData::data);
 }
