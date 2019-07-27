@@ -9,7 +9,7 @@
 #include <cstdlib>
 #include <map>
 #include <bits/stdc++.h>
-#include <iterator> 
+#include <iterator>
 #include <new>
 #include <vector>
 #include <pybind11/pybind11.h>
@@ -18,11 +18,8 @@
 namespace py = pybind11;
 using namespace std;
 
-class getData {
+class DB {
     public:
-    
-        #define dataLen 20
-
         SQLHENV henv;  
         SQLHDBC hdbc;  
         SQLHSTMT hstmt;
@@ -30,13 +27,8 @@ class getData {
 
         SQLCHAR * OutConnStr = (SQLCHAR * )malloc(255);  
         SQLSMALLINT * OutConnStrLen = (SQLSMALLINT *)malloc(255);  
-
-    	map<string, SQLCHAR[dataLen]> dataMap;
-        map<string, SQLLEN> ptrMap;
-
-    getData(string sQuery, vector<string> columns){
-
-        char* query = sQuery.c_str();
+    
+    SQLHSTMT connect(SQLCHAR* query){
 
         retcode = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &henv);  
   
@@ -66,9 +58,9 @@ class getData {
 
                             if (SQL_SUCCESS != SQLExecDirect(hstmt, query, SQL_NTS)) {
                                 cout << "Error querying SQL Server" << endl;
-                                completed();
+                                disconnect();
                             } else {
-                                bindColumns(columns);
+                                return hstmt;
                             }
                         }
                     }
@@ -77,35 +69,153 @@ class getData {
         }
     }
 
-    void bindColumns(vector<string> columns){
+    void disconnect(){
+        SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
+        SQLFreeHandle(SQL_HANDLE_ENV, henv);
+        SQLDisconnect(hdbc);  
+        SQLFreeHandle(SQL_HANDLE_DBC, hdbc);  
+    }
 
-        for(int i = 0; i < columns.size(); i++){
-            SQLBindCol(hstmt, i+1, SQL_C_CHAR, dataMap[columns.at(i)], dataLen, ptrMap[columns.at(i)]);
+};
+
+class getData {
+    public:
+
+        #define dataLen 20
+
+        SQLHSTMT hstmt;
+        SQLRETURN retcode;
+
+    	map<string, SQLREAL> dataMap;
+        map<string, float> priceMap;
+        map<string, float> positionMap;
+        map<string, SQLLEN> ptrMap;
+
+        float roi = 1.;
+
+        vector<string> items;
+        vector<string> tickers;
+
+    getData(string sQuery, vector<string> userItems, vector<string> userTickers){
+
+        tickers = userTickers;
+        items = userItems;
+
+        char* query = sQuery.c_str();
+
+        hstmt = DB().connect(query);
+
+        bindColumns();
+        SQLFetch(hstmt);
+        updatePrices();
+
+    }
+
+    void bindColumns(){
+
+        string column;
+        string ticker;
+
+        int itemsLen = items.size();
+
+        for(int i = 0; i < tickers.size(); i++){
+
+            ticker = tickers.at(i);
+
+            positionMap[ticker] = 0;
+
+            for(int j = 0; j < itemsLen; j++){
+                
+                column = ticker + '.' + items.at(j);
+                SQLBindCol(hstmt, i*itemsLen+j+1, SQL_C_FLOAT, (SQLPOINTER)&dataMap[column], dataLen, ptrMap[column]);
+
+            }
+        }
+    }
+
+    void updatePrices(){
+
+        string ticker;
+
+        for(int i = 0; i < tickers.size(); i++){
+
+            ticker = tickers.at(i);
+
+            priceMap[ticker] = dataMap[ticker + ".open"];
         }
     }
 
     bool next(){
 
+
         retcode = SQLFetch(hstmt);
-        return (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) ? true : false;
+        
+        roi = roi * increase();
+
+        updatePrices();
+
+        if(retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO){
+            return true;
+        } else {
+            DB().disconnect();
+            return false;
+        }
+
     }
 
-    double data(string item){
-	    return atof(dataMap[item]);
+
+    float increase(){
+
+        float total = 1;
+        float increase;
+        float totalReturn = 1;
+        string ticker;
+
+        for(int i = 0; i < tickers.size(); i++){
+            ticker = tickers.at(i);
+
+            increase = dataMap[ticker + ".open"]/priceMap[ticker] - 1;
+            total += positionMap[ticker] * increase;
+            totalReturn += positionMap[ticker] * increase;
+        }
+
+        
+        for(int i = 0; i < tickers.size(); i++){
+            ticker = tickers.at(i);
+            positionMap[ticker] = positionMap[ticker] * (dataMap[ticker + ".open"] / priceMap[ticker]) / total;
+        }
+
+        return totalReturn;
     }
 
-    void completed(){
-        SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
-        SQLFreeHandle(SQL_HANDLE_ENV, henv);
-        SQLDisconnect(hdbc);  
-        SQLFreeHandle(SQL_HANDLE_DBC, hdbc);  
-        cout << "done" << endl;
+    map<string, float> data(){
+	    return dataMap;
+    }
+
+    void buy(string ticker, float position){
+        positionMap[ticker] = position;
+    }
+
+    float returnOnInvestment(){
+        return roi;
+    }
+
+    map<string, float> prices(){
+        return priceMap;
+    }
+
+    map<string, float> positions(){
+        return positionMap;
     }
 };
 
 PYBIND11_MODULE(quantitate, m){
     py::class_<getData>(m, "getData")
-        .def(py::init<string &, vector<string>>())
+        .def(py::init<string &, vector<string>, vector<string>>())
         .def("next", &getData::next)
-        .def("data", &getData::data);
+        .def("data", &getData::data)
+        .def("roi", &getData::returnOnInvestment)
+        .def("prices", &getData::prices)
+        .def("buy", &getData::buy)
+        .def("positions", &getData::positions);
 }

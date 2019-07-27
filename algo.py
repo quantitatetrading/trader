@@ -3,31 +3,23 @@ import quantitate
 
 class tradingApp:
     def __init__(self, datasets):
-        SQLStatement, columns = self.createSQLStatement(datasets[0]['name'], datasets[0]['tickers'], datasets[0]['items'])
+        SQLStatement = self.createSQLStatement(datasets[0]['name'], datasets[0]['tickers'], datasets[0]['items'])
 
-        print(SQLStatement, columns)
-
-        self.data = quantitate.getData(SQLStatement, columns)
+        self.data = quantitate.getData(SQLStatement, datasets[0]['items'], datasets[0]['tickers'])
 
     def createSQLStatement(self, dataset, tickers, items):
 
-        itemsFromTables = "[%s].timestamp, " % tickers[0]
+        if open not in items:
+            items.insert(0, 'open') 
+
+        # itemsFromTables = "[%s].timestamp, " % tickers[0]
+        itemsFromTables = ""
         tables = ""
-        timestamps = ""
-
-        self.abbreviationToItem = {
-            'O': 'open',
-            'H': 'high',
-            'L': 'low',
-            'C': 'close',
-            'V': 'volume'
-        }
-
-	
+        timestamps = "" if len(tickers) == 1 else "WHERE "
 
         for i, ticker in enumerate(tickers):
 
-            itemsFromTables += ", ".join(["[%s].[%s]" % (ticker, self.abbreviationToItem[item]) for item in items])
+            itemsFromTables += ", ".join(["[%s].[%s]" % (ticker, item) for item in items])
             tables += ticker + dataset + " AS [" + ticker + "]"
             if i != 0: timestamps += "[" + ticker + "].timestamp = [" + tickers[i-1] + "].timestamp"
             if i != len(tickers) - 1:
@@ -36,26 +28,40 @@ class tradingApp:
                 if i != 0: timestamps += " AND "
 		
 
-        SQLStatement = 'SELECT %s FROM %s WHERE %s;' % (itemsFromTables, tables, timestamps)
+        SQLStatement = 'SELECT %s FROM %s %s;' % (itemsFromTables, tables, timestamps)
 
-        return SQLStatement, itemsFromTables.replace('[','').replace(']', '').split(', ')
+        return SQLStatement
 
 
-    def backtest(self, algorithm):
+    def backtest(self, algorithmClass):
+
+        algorithm = algorithmClass()
+
+        algorithm.init(self.data)
+
         while self.data.next():
-            algorithm(self.data.data)
+            algorithm.algo(self.data, self.data.data())
+
+        algorithm.end(self.data)
 
 if __name__ == '__main__':
-    datasets = [
-    {
+    datasets =[{
         'name': 'daily',
-        'tickers': ['AAPL', 'AMZN'],#] 'A', 'MSFT', 'ORCL', 'BA', 'RTN', 'NOC', 'LMT'],
-        'items': 'OHCLV'
-    }
-    ]
+        'tickers': ['AAPL', 'AMZN'],#, 'A', 'MSFT', 'ORCL', 'BA', 'RTN', 'NOC', 'LMT'],
+        'items': ['open','high','low','close','volume']
+    }]
+    
+    class algorithm:
 
-    def algorithm(data):
-        print(data("AAPL.high"))
+        def init(self, trader):
+            trader.buy("AAPL", 0.2)
+            trader.buy("AMZN", 0.8)
+
+        def algo(self, trader, data):
+            pass
+
+        def end(self, trader):
+            print(trader.roi())
 
     trader = tradingApp(datasets)
     trader.backtest(algorithm)
