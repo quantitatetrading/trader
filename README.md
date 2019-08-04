@@ -15,7 +15,7 @@ curl https://packages.microsoft.com/config/ubuntu/18.04/prod.list > /etc/apt/sou
 exit
 
 sudo apt-get update
-sudo ACCEPT_EULA=Y apt-get install msodbcsql17
+sudo ACCEPT_EULA=Y apt-get install -y msodbcsql17 mssql-tools odbcinst1debian2 unixodbc unixodbc-dev
 ```
 
 Then add the Quantitate database DSN by adding the following to `/etc/odbc.ini`
@@ -28,6 +28,8 @@ Database = stockData
 Server = quantitatesql.database.windows.net
 Port = 1433
 ```
+
+Test the database connection by running `isql mssql QuantitateAdmin SomeRandomPassword1`
 
 Then install pybind11 by performing `pip install pybind11`
 
