@@ -28,6 +28,7 @@ Database = stockData
 Server = quantitatesql.database.windows.net
 Port = 1433
 ```
+Make sure the driver filepath is correct, be sure to change the version to the one installed
 
 Test the database connection by running `isql mssql QuantitateAdmin SomeRandomPassword1`
 
