@@ -15,7 +15,7 @@ curl https://packages.microsoft.com/config/ubuntu/18.04/prod.list > /etc/apt/sou
 exit
 
 sudo apt-get update
-sudo ACCEPT_EULA=Y apt-get install msodbcsql17
+sudo ACCEPT_EULA=Y apt-get install -y msodbcsql17 mssql-tools odbcinst1debian2 unixodbc unixodbc-dev
 ```
 
 Then add the Quantitate database DSN by adding the following to `/etc/odbc.ini`
@@ -29,6 +29,8 @@ Server = quantitatesql.database.windows.net
 Port = 1433
 ```
 
+Test the database connection by running `isql mssql QuantitateAdmin SomeRandomPassword1`
+
 Then install pybind11 by performing `pip install pybind11`
 
 Now you can compile the c++ scripts by executing 
@@ -36,3 +38,4 @@ Now you can compile the c++ scripts by executing
 g++ -O3 -Wall -shared -std=c++11 -fPIC `python3 -m pybind11 --includes` c/getData.cpp -lodbc -fpermissive -o quantitate`python3-config --extension-suffix`
 ```
 You can now test the installation by running the python script: `python algo.py`
+
