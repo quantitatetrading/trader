@@ -39,5 +39,5 @@ Now you can compile the c++ scripts by executing
 ```
 g++ -O3 -Wall -shared -std=c++11 -fPIC `python3 -m pybind11 --includes` c/getData.cpp -lodbc -fpermissive -o quantitate`python3-config --extension-suffix`
 ```
-You can now test the installation by running the python script: `python algo.py`
+You can now test the installation by running the python script: `python trader.py`
 
